@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dsp-planner"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "ortools>=9.14.6206",
+    "pandas>=2.3.3",
+    "requests>=2.32.5",
+    "slpp>=1.2.3",
+]
+
+[dependency-groups]
+dev = ["dsp-planner", "mypy>=1.18.2", "types-requests>=2.32.4.20250913"]
+
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dsp_planner*"]
+
+[tool.uv.sources]
+dsp-planner = { workspace = true }
+
+[tool.ruff]
+line-length = 121
+exclude = ["*.ipynb", "**/*.ipynb"]
+
+[tool.ruff.lint]
+extend-select = [
+    "RUF",
+    "C",
+    "F",
+    "E",
+    "N",
+    "I",
+    "B",
+    "UP",
+    "A",
+    "SIM",
+    "RET",
+    "ANN001",
+    "ANN201",
+    "ANN202",
+    "ANN205",
+    "ANN206",
+]
+ignore = [
+    "RUF003",
+    "RUF007",
+    "RUF010",
+    "RUF015",
+    "RUF012",
+    "C901",
+    "RET501",
+    "RET502",
+    "RET503",
+    "N817",
+    "N806",
+    "E741",
+    "E731",
+    "E501",   # Since the formatter handles line length
+    "SIM105",
+    "SIM300",
+    "N812",
+    "B028",
+]
+
+[tool.ruff.format]
+docstring-code-format = true
+quote-style = "preserve"
+exclude = ["*.ipynb"]
+
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+files = ["dsp_planner"]
