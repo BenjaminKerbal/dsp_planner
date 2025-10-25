@@ -49,7 +49,7 @@ class GameItem:
         return f'{self.__class__.__name__}(name="{self.name}", id={self.id}, type=ItemType.{self.type.name})'
 
     def __lt__(self, other: GameItem) -> bool:
-        return self.name > other.name
+        return self.name < other.name
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, GameItem):
@@ -74,7 +74,7 @@ class BuildingRecipe:
         )
 
     def __lt__(self, other: BuildingRecipe) -> bool:
-        return self.building.name > other.building.name
+        return self.building.name < other.building.name
 
 
 BUILDING_TYPES: set[ItemType] = {ItemType.LOGISTICS, ItemType.PRODUCTION, ItemType.DEFENSE}

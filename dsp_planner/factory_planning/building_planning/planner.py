@@ -4,6 +4,7 @@ from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 from ortools.constraint_solver.pywrapcp import Assignment
 from ortools.constraint_solver.routing_parameters_pb2 import RoutingSearchParameters
 
+from ...building_recipes import BuildingRecipes
 from ...types import BUILDING_TYPES, BuildingRecipe, GameItem
 from .build_plan_types import BuildingPlanResult, BuildingRecipeChange
 
@@ -12,7 +13,7 @@ def plan_building_order(buildings: set[GameItem], groups: int = 1) -> BuildingPl
     assert all(b.type in BUILDING_TYPES for b in buildings), "All items must be buildings"
 
     all_recipes_map: dict[GameItem, BuildingRecipe] = {
-        recipe.building: recipe for recipe in vars(BuildingRecipe).values() if isinstance(recipe, BuildingRecipe)
+        recipe.building: recipe for recipe in vars(BuildingRecipes).values() if isinstance(recipe, BuildingRecipe)
     }
     recipes = tuple(all_recipes_map[b] for b in sorted(buildings))
 
@@ -20,14 +21,13 @@ def plan_building_order(buildings: set[GameItem], groups: int = 1) -> BuildingPl
     manager = pywrapcp.RoutingIndexManager(len(recipes) + 1, groups, 0)  # +1 for depot (can be anywhere)
     routing = pywrapcp.RoutingModel(manager)
 
-    def distance_callback(from_index: int, to_index: int) -> int:
-        """Returns the distance between the two nodes."""
-        # Convert from routing variable Index to distance matrix NodeIndex.
+    def cost_callback(from_index: int, to_index: int) -> int:
+        """Returns the cost between the two nodes."""
         from_node = cast(int, manager.IndexToNode(from_index))
         to_node = cast(int, manager.IndexToNode(to_index))
         return cost_matrix[from_node][to_node]
 
-    transit_callback_index = routing.RegisterTransitCallback(distance_callback)
+    transit_callback_index = routing.RegisterTransitCallback(cost_callback)
     # Define cost of each arc.
     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 

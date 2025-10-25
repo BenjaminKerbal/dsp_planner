@@ -12,7 +12,9 @@ Ensure that you have [uv](https://docs.astral.sh/uv/getting-started/installation
     - Windows: `.venv\Scripts\activate`
 3. Install dependencies: `uv sync --group dev`
 
-When the environment is set up correctly we then need to generate all building items and recipes from the game data. This is done automatically when you run the `generate_data.py` script in the root directory. This will fetch the html data from the [Dyson Sphere Program Wiki](https://dyson-sphere-program.fandom.com/wiki/Module:Recipe/Data) and parse it into python data structures.
+If the types in dsp_planner/items.py or dsp_planner/building_recipes.py are outdated, you may need to regenerate them.
+This is done automatically when you run the `generate_data.py` script in the root directory. 
+This will fetch the html data from the [Dyson Sphere Program Wiki](https://dyson-sphere-program.fandom.com/wiki/Module:Recipe/Data) and parse it into python data structures.
 
 ## Planning Building Order
 This planner aims to optimize the order of which to constructing buildings so that the items needed for each building recipe would change as little as possible between consecutive buildings.
