@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...types import BuildingRecipe, GameItem
+from ...types import GameItem, Recipe
 
 
 @dataclass(slots=True, frozen=True)
@@ -12,9 +12,9 @@ class BuildingRecipeChange:
     remove_inputs: set[GameItem]
 
     @staticmethod
-    def from_recipes(old_recipe: BuildingRecipe, new_recipe: BuildingRecipe) -> BuildingRecipeChange:
+    def from_recipes(old_recipe: Recipe, new_recipe: Recipe) -> BuildingRecipeChange:
         return BuildingRecipeChange(
-            building=new_recipe.building,
+            building=new_recipe.output,
             new_inputs=new_recipe.inputs - old_recipe.inputs,
             remove_inputs=old_recipe.inputs - new_recipe.inputs,
         )

@@ -34,7 +34,10 @@ if __name__ == "__main__":
         BI.ARC_SMELTER,
         BI.MATRIX_LAB,
         BI.EM_RAIL_EJECTOR,
+        BI.LOGISTICS_DRONE,
+        BI.INTERSTELLAR_LOGISTICS_VESSEL,
+        BI.OIL_REFINERY,
     }
 
-    plan = plan_building_order(buildings_in_plan)
+    plan = plan_building_order(buildings_in_plan, 2)
     print(plan)

@@ -1,13 +1,13 @@
 from warnings import warn
 
 try:
-    from .building_recipes import BuildingRecipes
     from .items import AllItems, BuildingItems
+    from .recipes import Recipes
 
     __all__ = [
         "AllItems",
         "BuildingItems",
-        "BuildingRecipes",
+        "Recipes",
     ]
 except ImportError:
     warn(

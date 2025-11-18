@@ -4,16 +4,14 @@ from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 from ortools.constraint_solver.pywrapcp import Assignment
 from ortools.constraint_solver.routing_parameters_pb2 import RoutingSearchParameters
 
-from ...building_recipes import BuildingRecipes
-from ...types import BUILDING_TYPES, BuildingRecipe, GameItem
+from ...recipes import Recipes
+from ...types import GameItem, Recipe
 from .build_plan_types import BuildingPlanResult, BuildingRecipeChange
 
 
 def plan_building_order(buildings: set[GameItem], groups: int = 1) -> BuildingPlanResult:
-    assert all(b.type in BUILDING_TYPES for b in buildings), "All items must be buildings"
-
-    all_recipes_map: dict[GameItem, BuildingRecipe] = {
-        recipe.building: recipe for recipe in vars(BuildingRecipes).values() if isinstance(recipe, BuildingRecipe)
+    all_recipes_map: dict[GameItem, Recipe] = {
+        recipe.output: recipe for recipe in vars(Recipes).values() if isinstance(recipe, Recipe)
     }
     recipes = tuple(all_recipes_map[b] for b in sorted(buildings))
 
@@ -52,7 +50,7 @@ def plan_building_order(buildings: set[GameItem], groups: int = 1) -> BuildingPl
     raise RuntimeError("No solution found!")
 
 
-def _create_cost_matrix(buildings: tuple[BuildingRecipe, ...]) -> list[list[int]]:
+def _create_cost_matrix(buildings: tuple[Recipe, ...]) -> list[list[int]]:
     """Create a cost matrix between building recipes."""
     # Add one extra size for the depot (which can be anywhere -> zero cost to all)
     size = len(buildings) + 1
@@ -64,13 +62,13 @@ def _create_cost_matrix(buildings: tuple[BuildingRecipe, ...]) -> list[list[int]
     return matrix
 
 
-def _cost_function(a: BuildingRecipe, b: BuildingRecipe) -> int:
+def _cost_function(a: Recipe, b: Recipe) -> int:
     """
     A simple cost metric between two building recipes.
     Direction is from a to b.
     """
 
-    if a.building in b.inputs:
+    if a.output in b.inputs:
         return 0  # No cost if output of a is input to b
 
     if a.inputs == b.inputs:
@@ -86,7 +84,7 @@ def _create_building_plan(
     manager: pywrapcp.RoutingIndexManager,
     routing: pywrapcp.RoutingModel,
     solution: Assignment,
-    recipes: tuple[BuildingRecipe, ...],
+    recipes: tuple[Recipe, ...],
     groups: int,
 ) -> BuildingPlanResult:
     def next_index(index: int) -> int:
@@ -97,7 +95,7 @@ def _create_building_plan(
     for group_id in range(groups):
         if not routing.IsVehicleUsed(solution, group_id):
             continue
-        building_order: list[BuildingRecipe] = []
+        building_order: list[Recipe] = []
         index = routing.Start(group_id)  # Start index (depot)
         while True:
             if routing.IsEnd(index := next_index(index)):
@@ -105,7 +103,7 @@ def _create_building_plan(
             building_order.append(recipes[manager.IndexToNode(index) - 1])  # -1 to account for depot
 
         building_recipe_changes: list[BuildingRecipeChange] = [
-            BuildingRecipeChange(building_order[0].building, building_order[0].inputs, set())
+            BuildingRecipeChange(building_order[0].output, building_order[0].inputs, set())
         ]
         for i in range(1, len(building_order)):
             building_recipe_changes.append(BuildingRecipeChange.from_recipes(building_order[i - 1], building_order[i]))

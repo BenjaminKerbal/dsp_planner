@@ -58,23 +58,23 @@ class GameItem:
 
 
 @dataclass(slots=True, frozen=True)
-class BuildingRecipe:
-    building: GameItem
+class Recipe:
+    output: GameItem  # TODO: Support multiple outputs
     inputs: set[GameItem]
 
     @property
     def field_name(self) -> str:
-        return self.building.field_name
+        return self.output.field_name
 
     @property
     def initialize_string(self) -> str:
         return (
-            f"{self.__class__.__name__}(building=AllItems.{self.building.field_name}, "
+            f"{self.__class__.__name__}(output=AllItems.{self.output.field_name}, "
             f"inputs={"{"}{', '.join(f"AllItems.{item.field_name}" for item in self.inputs)},{"}"})"
         )
 
-    def __lt__(self, other: BuildingRecipe) -> bool:
-        return self.building.name < other.building.name
+    def __lt__(self, other: Recipe) -> bool:
+        return self.output.name < other.output.name
 
 
-BUILDING_TYPES: set[ItemType] = {ItemType.LOGISTICS, ItemType.PRODUCTION, ItemType.DEFENSE}
+BUILDING_TYPES: set[ItemType] = {ItemType.LOGISTICS, ItemType.PRODUCTION, ItemType.DEFENSE, ItemType.TURRET}
