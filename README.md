@@ -48,3 +48,5 @@ if __name__ == "__main__":
     print(plan)
 ```
 
+To keep the factory from getting too long, pass `max_row_length` to split the buildings into as few rows as possible with at most that many buildings each.
+

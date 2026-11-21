@@ -11,7 +11,7 @@ if __name__ == "__main__":
         AI.SR_PLASMA_TURRET,
     }
 
-    plan = plan_building_order(turrets, 1)
+    plan = plan_building_order(turrets)
     print(plan)
 
     ammo: set[AI] = {
@@ -21,5 +21,5 @@ if __name__ == "__main__":
         AI.TITANIUM_AMMO_BOX,
     }
 
-    plan = plan_building_order(ammo, 1)
+    plan = plan_building_order(ammo)
     print(plan)

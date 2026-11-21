@@ -39,5 +39,5 @@ if __name__ == "__main__":
         BI.OIL_REFINERY,
     }
 
-    plan = plan_building_order(buildings_in_plan, 2)
+    plan = plan_building_order(buildings_in_plan, max_row_length=16)
     print(plan)
