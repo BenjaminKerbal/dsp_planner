@@ -1,121 +1,126 @@
 import math
+import random
+import time
+from collections.abc import Iterable, Iterator
 from datetime import timedelta
-from typing import cast
-
-from ortools.constraint_solver import pywrapcp, routing_enums_pb2
-from ortools.constraint_solver.pywrapcp import Assignment
-from ortools.constraint_solver.routing_parameters_pb2 import RoutingSearchParameters
 
 from ...recipes import Recipes
 from ...types import GameItem, Recipe
-from .build_plan_types import BuildingPlanResult, BuildingRecipeChange
+from .belts import count_feeds, row_changes
+from .build_plan_types import BuildingPlanResult
+
+# Early in the search, a change that needs two more feeds is accepted about a third of the time
+_START_TEMPERATURE = 2.0
+
+_Layout = list[list[Recipe]]
 
 
 def plan_building_order(
     buildings: set[GameItem],
     max_row_length: int | None = None,
+    belts: int = 6,
     search_time: timedelta = timedelta(seconds=5),
 ) -> BuildingPlanResult:
-    """Order the buildings in as few rows as `max_row_length` allows (one row if not given)."""
+    """Order the buildings so that items have to be brought to the rows as few times as possible.
+
+    The buildings are split into as few rows as `max_row_length` allows (one row if not given), and every building
+    can reach `belts` belts.
+    """
     all_recipes_map: dict[GameItem, Recipe] = {
         recipe.output: recipe for recipe in vars(Recipes).values() if isinstance(recipe, Recipe)
     }
     recipes = tuple(all_recipes_map[b] for b in sorted(buildings))
+    _check_enough_belts(recipes, belts)
+
     row_length = max_row_length or len(recipes)
     rows = math.ceil(len(recipes) / row_length)
-
-    cost_matrix: list[list[int]] = _create_cost_matrix(recipes)
-    manager = pywrapcp.RoutingIndexManager(len(recipes) + 1, rows, 0)  # +1 for the start and end of every row
-    routing = pywrapcp.RoutingModel(manager)
-
-    def cost_callback(from_index: int, to_index: int) -> int:
-        """Returns the cost between the two nodes."""
-        from_node = cast(int, manager.IndexToNode(from_index))
-        to_node = cast(int, manager.IndexToNode(to_index))
-        return cost_matrix[from_node][to_node]
-
-    transit_callback_index = routing.RegisterTransitCallback(cost_callback)
-    # Define cost of each arc.
-    routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
-
-    # Each arc counts as one, so a row with n buildings has n + 1 arcs including the one back to the row end
-    routing.AddConstantDimension(1, row_length + 1, True, "row_length")
-
-    search_parameters: RoutingSearchParameters = pywrapcp.DefaultRoutingSearchParameters()
-    search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
-    search_parameters.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-    search_parameters.time_limit.FromTimedelta(search_time)
-
-    # Solve the problem.
-    solution = routing.SolveWithParameters(search_parameters)
-    if solution:
-        return _create_building_plan(manager, routing, solution, recipes, rows)
-    raise RuntimeError("No solution found!")
+    initial_layout = [list(recipes[row::rows]) for row in range(rows)]
+    layout = _anneal(initial_layout, row_length, belts, search_time)
+    return BuildingPlanResult(tuple(row_changes(row, belts) for row in layout))
 
 
-def _create_cost_matrix(buildings: tuple[Recipe, ...]) -> list[list[int]]:
-    """Create a cost matrix between building recipes.
+def _check_enough_belts(recipes: Iterable[Recipe], belts: int) -> None:
+    for recipe in recipes:
+        if len(recipe.inputs) > belts:
+            raise ValueError(
+                f"{recipe.output.name} needs {len(recipe.inputs)} inputs, but a building can only reach {belts} belts"
+            )
 
-    Node 0 is the start and end of every row: starting a row costs adding all inputs of its first building,
-    ending a row is free.
+
+def _anneal(initial_layout: _Layout, max_row_length: int, belts: int, search_time: timedelta) -> _Layout:
+    """Search for the layout with the fewest feeds using simulated annealing.
+
+    Rows are never changed in place, so copying the outer list is enough to keep a layout.
     """
-    size = len(buildings) + 1
-    matrix = [[0] * size for _ in range(size)]
-    for i in range(1, size):
-        matrix[0][i] = _row_start_cost(buildings[i - 1])
-        for j in range(1, size):
-            if i != j:
-                matrix[i][j] = _cost_function(buildings[i - 1], buildings[j - 1])
-    return matrix
-
-
-def _cost_function(a: Recipe, b: Recipe) -> int:
-    """
-    A simple cost metric between two building recipes.
-    Direction is from a to b.
-    """
-    # The output of a can be passed straight on to b, so it doesn't need to be added
-    added_items = b.inputs - a.inputs - {a.output}
-    removed_items = a.inputs - b.inputs
-    return _change_cost(added_items, removed_items)
-
-
-def _row_start_cost(first: Recipe) -> int:
-    return _change_cost(added_items=first.inputs, removed_items=set())
-
-
-def _change_cost(added_items: set[GameItem], removed_items: set[GameItem]) -> int:
-    # Penalize more to add new items compared to removing items
-    return 1 + 2 * len(added_items) + len(removed_items)
-
-
-def _create_building_plan(
-    manager: pywrapcp.RoutingIndexManager,
-    routing: pywrapcp.RoutingModel,
-    solution: Assignment,
-    recipes: tuple[Recipe, ...],
-    rows: int,
-) -> BuildingPlanResult:
-    def next_index(index: int) -> int:
-        return cast(int, solution.Value(routing.NextVar(index)))
-
-    print(f"Total cost: {solution.ObjectiveValue()}")
-    result: list[tuple[BuildingRecipeChange, ...]] = []
-    for row in range(rows):
-        if not routing.IsVehicleUsed(solution, row):
+    rng = random.Random(0)
+    layout = list(initial_layout)
+    feeds = [count_feeds(row, belts) for row in layout]
+    best_layout, best_feeds = list(layout), sum(feeds)
+    for temperature in _cooling_schedule(search_time):
+        changed_rows = _random_change(layout, max_row_length, rng)
+        new_feeds = {index: count_feeds(row, belts) for index, row in changed_rows.items()}
+        feed_change = sum(new_feeds[index] - feeds[index] for index in changed_rows)
+        if not _accept(feed_change, temperature, rng):
             continue
-        building_order: list[Recipe] = []
-        index = routing.Start(row)  # Start index (row start)
-        while True:
-            if routing.IsEnd(index := next_index(index)):
-                break
-            building_order.append(recipes[manager.IndexToNode(index) - 1])  # -1 to account for the row start node
+        for index, row in changed_rows.items():
+            layout[index] = row
+            feeds[index] = new_feeds[index]
+        if sum(feeds) < best_feeds:
+            best_layout, best_feeds = list(layout), sum(feeds)
+    return best_layout
 
-        building_recipe_changes: list[BuildingRecipeChange] = [
-            BuildingRecipeChange(building_order[0].output, building_order[0].inputs, set())
-        ]
-        for i in range(1, len(building_order)):
-            building_recipe_changes.append(BuildingRecipeChange.from_recipes(building_order[i - 1], building_order[i]))
-        result.append(tuple(building_recipe_changes))
 
-    return BuildingPlanResult(solution.ObjectiveValue(), tuple(result))
+def _cooling_schedule(search_time: timedelta) -> Iterator[float]:
+    """Temperatures falling linearly from the start temperature towards zero over the search time."""
+    start = time.monotonic()
+    duration = search_time.total_seconds()
+    elapsed = 0.0
+    while elapsed < duration:
+        yield _START_TEMPERATURE * (1 - elapsed / duration)
+        elapsed = time.monotonic() - start
+
+
+def _accept(feed_change: int, temperature: float, rng: random.Random) -> bool:
+    """Always accept improvements, and worse layouts with a chance that shrinks as the temperature drops."""
+    if feed_change <= 0:
+        return True
+    return rng.random() < math.exp(-feed_change / temperature)
+
+
+def _random_change(layout: _Layout, max_row_length: int, rng: random.Random) -> dict[int, list[Recipe]]:
+    """A small random change to the layout, as the new contents of the rows it touches."""
+    first, second = rng.randrange(len(layout)), rng.randrange(len(layout))
+    if first != second:
+        new_first, new_second = _exchange_between_rows(layout[first], layout[second], max_row_length, rng)
+        return {first: new_first, second: new_second}
+    if len(layout[first]) < 2:
+        return {}
+    return {first: _reorder_row(layout[first], rng)}
+
+
+def _exchange_between_rows(
+    from_row: list[Recipe], to_row: list[Recipe], max_row_length: int, rng: random.Random
+) -> tuple[list[Recipe], list[Recipe]]:
+    """Move a building to the other row if it has room, or swap two buildings between the rows."""
+    new_from, new_to = from_row.copy(), to_row.copy()
+    taken = rng.randrange(len(new_from))
+    if len(new_to) < max_row_length and rng.random() < 0.5:
+        new_to.insert(rng.randrange(len(new_to) + 1), new_from.pop(taken))
+    else:
+        given = rng.randrange(len(new_to))
+        new_from[taken], new_to[given] = new_to[given], new_from[taken]
+    return new_from, new_to
+
+
+def _reorder_row(row: list[Recipe], rng: random.Random) -> list[Recipe]:
+    """Swap two buildings, move one of them, or reverse the stretch between them."""
+    new_row = row.copy()
+    first, last = sorted(rng.sample(range(len(row)), 2))
+    match rng.randrange(3):
+        case 0:
+            new_row[first], new_row[last] = new_row[last], new_row[first]
+        case 1:
+            new_row.insert(last, new_row.pop(first))
+        case _:
+            new_row[first : last + 1] = reversed(new_row[first : last + 1])
+    return new_row

@@ -1,8 +1,7 @@
-from __future__ import annotations
-
+from collections.abc import Iterable
 from dataclasses import dataclass
 
-from ...types import GameItem, Recipe
+from ...types import GameItem
 
 
 @dataclass(slots=True, frozen=True)
@@ -10,14 +9,7 @@ class BuildingRecipeChange:
     building: GameItem
     new_inputs: set[GameItem]
     remove_inputs: set[GameItem]
-
-    @staticmethod
-    def from_recipes(old_recipe: Recipe, new_recipe: Recipe) -> BuildingRecipeChange:
-        return BuildingRecipeChange(
-            building=new_recipe.output,
-            new_inputs=new_recipe.inputs - old_recipe.inputs,
-            remove_inputs=old_recipe.inputs - new_recipe.inputs,
-        )
+    output_to_belt: bool  # Whether a later building in the row takes this building's output from the belts
 
     def __str__(self) -> str:
         add_str = (
@@ -28,31 +20,35 @@ class BuildingRecipeChange:
             if not self.remove_inputs
             else "\n    Remove: " + ", ".join(item.field_name for item in sorted(self.remove_inputs))
         )
-        return f"{self.building.name}:{add_str}{remove_str}"
+        output_str = "\n    Output to belt" if self.output_to_belt else ""
+        return f"{self.building.name}:{add_str}{remove_str}{output_str}"
 
 
 class BuildingPlanResult:
-    _total_cost: int
     _building_recipe_changes: tuple[tuple[BuildingRecipeChange, ...], ...]
 
-    def __init__(self, total_cost: int, building_recipe_changes: tuple[tuple[BuildingRecipeChange, ...], ...]) -> None:
-        self._total_cost = total_cost
+    def __init__(self, building_recipe_changes: tuple[tuple[BuildingRecipeChange, ...], ...]) -> None:
         self._building_recipe_changes = building_recipe_changes
 
-    def __str__(self) -> str:
-        def fmt_items(items: set[GameItem]) -> str:
-            if not items:
-                return "—"
-            return ", ".join(sorted((it.name for it in items), key=str.lower))
+    @property
+    def total_feeds(self) -> int:
+        """How many times an item has to be brought to a row from outside."""
+        return sum(len(change.new_inputs) for row in self._building_recipe_changes for change in row)
 
-        lines: list[str] = []
+    def __str__(self) -> str:
+        def fmt_items(names: Iterable[str]) -> str:
+            return ", ".join(sorted(names, key=str.lower)) or "—"
+
+        lines: list[str] = [f"Items brought to the rows: {self.total_feeds}\n"]
         for step_idx, group in enumerate(self._building_recipe_changes, start=1):
-            lines.append(f"Plan {step_idx}")
+            lines.append(f"Row {step_idx}")
             entries: list[tuple[str, str, str]] = []
             for change in group:
-                added = fmt_items(change.new_inputs)
-                removed = fmt_items(change.remove_inputs)
-                entries.append((change.building.name, added, removed))
+                added_names = [item.name for item in change.new_inputs]
+                if change.output_to_belt:
+                    added_names.append(f"{change.building.name} (output)")
+                removed_names = [item.name for item in change.remove_inputs]
+                entries.append((change.building.name, fmt_items(added_names), fmt_items(removed_names)))
 
             # Determine column widths
             col1_width = max(max([len(e[0]) for e in entries], default=-1), 25)

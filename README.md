@@ -1,7 +1,7 @@
 # Planning Module for [Dyson Sphere Program](https://store.steampowered.com/app/1366540/Dyson_Sphere_Program/)
 
 This repo contains planning algorithms to help optimize factory building in `DSP`. Currently it includes:
-- Building Order Planner: Optimize the order of building constructions to minimize changes in required items between consecutive buildings.
+- Building Order Planner: Order the buildings of a mall so that items have to be brought to its rows of buildings as few times as possible.
 
 
 ## Installation
@@ -17,7 +17,7 @@ This is done automatically when you run the `generate_data.py` script in the roo
 This will fetch the html data from the [Dyson Sphere Program Wiki](https://dyson-sphere-program.fandom.com/wiki/Module:Recipe/Data) and parse it into python data structures.
 
 ## Planning Building Order
-This planner aims to optimize the order of which to constructing buildings so that the items needed for each building recipe would change as little as possible between consecutive buildings.
+This planner assumes the buildings stand in rows with belts running along them. An item stays on its belt until no building further down the row needs it, or until the belt is needed for an item that is used sooner. The planner orders the buildings so that items have to be brought to the rows as few times as possible. When a building's output is used further down its row (e.g. Tesla Tower before Wireless Power Tower), the output goes on the belts instead of being brought in.
 
 To plan the building order, you can use the `plan_building_order` function from the `factory_planning` module. For example:
 
@@ -48,5 +48,5 @@ if __name__ == "__main__":
     print(plan)
 ```
 
-To keep the factory from getting too long, pass `max_row_length` to split the buildings into as few rows as possible with at most that many buildings each.
+To keep the factory from getting too long, pass `max_row_length` to split the buildings into as few rows as possible with at most that many buildings each. `belts` sets how many belts a building can reach (6 by default, three on each side with long sorters), and `search_time` how long to search for a better order (5 seconds by default). The search is random, so the result can differ slightly between runs.
 

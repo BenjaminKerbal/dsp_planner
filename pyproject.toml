@@ -9,7 +9,6 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "ortools>=9.14.6206",
     "pandas>=2.3.3",
     "requests>=2.32.5",
     "slpp>=1.2.3",
