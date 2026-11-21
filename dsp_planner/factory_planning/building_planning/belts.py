@@ -14,50 +14,58 @@ def count_feeds(row: Sequence[Recipe], belts: int) -> int:
 
 def row_changes(row: Sequence[Recipe], belts: int) -> tuple[BuildingRecipeChange, ...]:
     """Which belts start and end at each building when every building can reach `belts` belts."""
+    from_neighbors = [_from_neighbors(row, position) for position in range(len(row))]
+    belt_needs = [
+        frozenset(recipe.inputs - handed_over) for recipe, handed_over in zip(row, from_neighbors, strict=True)
+    ]
+
     changes: list[BuildingRecipeChange] = []
     previous: frozenset[GameItem] = frozenset()
-    for recipe, on_belts in zip(row, _belt_contents(row, belts), strict=True):
+    for recipe, handed_over, on_belts in zip(row, from_neighbors, _belt_contents(belt_needs, belts), strict=True):
         changes.append(
             BuildingRecipeChange(
                 building=recipe.output,
-                new_inputs=set(on_belts - previous - {recipe.output}),
+                new_inputs=set(on_belts - previous),
                 remove_inputs=set(previous - on_belts),
-                output_to_belt=recipe.output in on_belts,
+                from_neighbors=handed_over,
             )
         )
         previous = on_belts
     return tuple(changes)
 
 
-def _belt_contents(row: Sequence[Recipe], belts: int) -> list[frozenset[GameItem]]:
-    return _trim_unused_ends(row, _keep_needed_soonest(row, belts))
+def _from_neighbors(row: Sequence[Recipe], position: int) -> set[GameItem]:
+    """Inputs of the building at `position` that a neighboring building produces and hands over with a sorter."""
+    neighbors = [row[index] for index in (position - 1, position + 1) if 0 <= index < len(row)]
+    return row[position].inputs & {neighbor.output for neighbor in neighbors}
 
 
-def _keep_needed_soonest(row: Sequence[Recipe], belts: int) -> list[frozenset[GameItem]]:
+def _belt_contents(needs: Sequence[frozenset[GameItem]], belts: int) -> list[frozenset[GameItem]]:
+    return _trim_unused_ends(needs, _keep_needed_soonest(needs, belts))
+
+
+def _keep_needed_soonest(needs: Sequence[frozenset[GameItem]], belts: int) -> list[frozenset[GameItem]]:
     """Items on the belts at each building when an item only leaves the belts to make room for one needed sooner.
 
-    For a fixed order this needs the fewest feeds. A building's output goes on the belts when a later building in
-    the row uses it.
+    For a fixed order this needs the fewest feeds.
     """
     on_belts: set[GameItem] = set()
     contents: list[frozenset[GameItem]] = []
-    for recipe, next_use in zip(row, _next_uses(row), strict=True):
-        on_belts |= recipe.inputs
-        if recipe.output in next_use:
-            on_belts.add(recipe.output)
+    for needed, next_use in zip(needs, _next_uses(needs), strict=True):
+        on_belts |= needed
         while len(on_belts) > belts:
-            on_belts.remove(_needed_last(on_belts - recipe.inputs, next_use))
+            on_belts.remove(_needed_last(on_belts - needed, next_use))
         contents.append(frozenset(on_belts))
     return contents
 
 
-def _next_uses(row: Sequence[Recipe]) -> list[dict[GameItem, int]]:
+def _next_uses(needs: Sequence[frozenset[GameItem]]) -> list[dict[GameItem, int]]:
     """For every building, the position of the next building further down the row that needs each item."""
     next_uses: list[dict[GameItem, int]] = []
     upcoming: dict[GameItem, int] = {}
-    for position in reversed(range(len(row))):
+    for position in reversed(range(len(needs))):
         next_uses.append(upcoming.copy())
-        upcoming.update(dict.fromkeys(row[position].inputs, position))
+        upcoming.update(dict.fromkeys(needs[position], position))
     next_uses.reverse()
     return next_uses
 
@@ -67,11 +75,13 @@ def _needed_last(candidates: set[GameItem], next_use: dict[GameItem, int]) -> Ga
     return max(candidates, key=lambda item: next_use.get(item, math.inf))
 
 
-def _trim_unused_ends(row: Sequence[Recipe], contents: Sequence[frozenset[GameItem]]) -> list[frozenset[GameItem]]:
+def _trim_unused_ends(
+    needs: Sequence[frozenset[GameItem]], contents: Sequence[frozenset[GameItem]]
+) -> list[frozenset[GameItem]]:
     """End every belt at the last building that uses it."""
     trimmed: list[frozenset[GameItem]] = []
     still_needed: frozenset[GameItem] = frozenset()
-    for recipe, on_belts in zip(reversed(row), reversed(contents), strict=True):
-        still_needed = on_belts & (recipe.inputs | still_needed)
+    for needed, on_belts in zip(reversed(needs), reversed(contents), strict=True):
+        still_needed = on_belts & (needed | still_needed)
         trimmed.append(still_needed)
     return trimmed[::-1]

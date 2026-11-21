@@ -9,7 +9,7 @@ class BuildingRecipeChange:
     building: GameItem
     new_inputs: set[GameItem]
     remove_inputs: set[GameItem]
-    output_to_belt: bool  # Whether a later building in the row takes this building's output from the belts
+    from_neighbors: set[GameItem]  # Inputs that a neighboring building hands over with a sorter
 
     def __str__(self) -> str:
         add_str = (
@@ -20,8 +20,12 @@ class BuildingRecipeChange:
             if not self.remove_inputs
             else "\n    Remove: " + ", ".join(item.field_name for item in sorted(self.remove_inputs))
         )
-        output_str = "\n    Output to belt" if self.output_to_belt else ""
-        return f"{self.building.name}:{add_str}{remove_str}{output_str}"
+        neighbor_str = (
+            ""
+            if not self.from_neighbors
+            else "\n    From neighbor: " + ", ".join(item.field_name for item in sorted(self.from_neighbors))
+        )
+        return f"{self.building.name}:{add_str}{remove_str}{neighbor_str}"
 
 
 class BuildingPlanResult:
@@ -45,8 +49,7 @@ class BuildingPlanResult:
             entries: list[tuple[str, str, str]] = []
             for change in group:
                 added_names = [item.name for item in change.new_inputs]
-                if change.output_to_belt:
-                    added_names.append(f"{change.building.name} (output)")
+                added_names += [f"{item.name} (from neighbor)" for item in change.from_neighbors]
                 removed_names = [item.name for item in change.remove_inputs]
                 entries.append((change.building.name, fmt_items(added_names), fmt_items(removed_names)))
 

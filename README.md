@@ -17,7 +17,7 @@ This is done automatically when you run the `generate_data.py` script in the roo
 This will fetch the html data from the [Dyson Sphere Program Wiki](https://dyson-sphere-program.fandom.com/wiki/Module:Recipe/Data) and parse it into python data structures.
 
 ## Planning Building Order
-This planner assumes the buildings stand in rows with belts running along them. An item stays on its belt until no building further down the row needs it, or until the belt is needed for an item that is used sooner. The planner orders the buildings so that items have to be brought to the rows as few times as possible. When a building's output is used further down its row (e.g. Tesla Tower before Wireless Power Tower), the output goes on the belts instead of being brought in.
+This planner assumes the buildings stand in rows with belts running along them. An item stays on its belt until no building further down the row needs it, or until the belt is needed for an item that is used sooner. The planner orders the buildings so that items have to be brought to the rows as few times as possible. When a building's output is used by the building next to it (e.g. Tesla Tower next to Wireless Power Tower), a sorter hands it over directly, so it needs no belt.
 
 To plan the building order, you can use the `plan_building_order` function from the `factory_planning` module. For example:
 
